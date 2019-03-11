@@ -27,7 +27,8 @@ tf.app.flags.DEFINE_float("max_gradient_norm", 5, "Clip gradients to this norm."
 tf.app.flags.DEFINE_integer("batch_size", 16, "Batch size to use during training.")
 tf.app.flags.DEFINE_integer("iterations", int(1e5), "Iterations to train for.")
 # Architecture
-tf.app.flags.DEFINE_string("architecture", "tied", "Seq2seq architecture to use: [basic, tied].")
+#tf.app.flags.DEFINE_string("architecture", "tied", "Seq2seq architecture to use: [basic, tied].")
+tf.app.flags.DEFINE_string("architecture", "bid", "Seq2seq architecture to use: [basic, tied, bid].")
 tf.app.flags.DEFINE_integer("size", 1024, "Size of each model layer.")
 tf.app.flags.DEFINE_integer("num_layers", 1, "Number of layers in the model.")
 tf.app.flags.DEFINE_integer("seq_length_in", 50, "Number of frames to feed into the encoder. 25 fps")
@@ -638,6 +639,7 @@ def define_actions( action ):
               "greeting", "phoning", "posing", "purchases", "sitting",
               "sittingdown", "takingphoto", "waiting", "walkingdog",
               "walkingtogether"]
+  #actions = ["walking"]
 
   if action in actions:
     return [action]

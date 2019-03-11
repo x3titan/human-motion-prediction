@@ -81,13 +81,13 @@ class Seq2SeqModel(object):
     # === Create the RNN that will keep the state ===
     print('rnn_size = {0}'.format( rnn_size ))
     cell = tf.contrib.rnn.GRUCell( self.rnn_size )
+    cellBk = tf.contrib.rnn.GRUCell( self.rnn_size )    
 
     if num_layers > 1:
       cell = tf.contrib.rnn.MultiRNNCell( [tf.contrib.rnn.GRUCell(self.rnn_size) for _ in range(num_layers)] )
 
     # === Transform the inputs ===
     with tf.name_scope("inputs"):
-
       enc_in = tf.placeholder(dtype, shape=[None, source_seq_len-1, self.input_size], name="enc_in")
       dec_in = tf.placeholder(dtype, shape=[None, target_seq_len, self.input_size], name="dec_in")
       dec_out = tf.placeholder(dtype, shape=[None, target_seq_len, self.input_size], name="dec_out")
@@ -96,20 +96,23 @@ class Seq2SeqModel(object):
       self.decoder_inputs = dec_in
       self.decoder_outputs = dec_out
 
-      enc_in = tf.transpose(enc_in, [1, 0, 2])
-      dec_in = tf.transpose(dec_in, [1, 0, 2])
-      dec_out = tf.transpose(dec_out, [1, 0, 2])
+      if architecture != 'bid':
+        enc_in = tf.transpose(enc_in, [1, 0, 2])
+        dec_in = tf.transpose(dec_in, [1, 0, 2])
+        dec_out = tf.transpose(dec_out, [1, 0, 2])
 
-      enc_in = tf.reshape(enc_in, [-1, self.input_size])
-      dec_in = tf.reshape(dec_in, [-1, self.input_size])
-      dec_out = tf.reshape(dec_out, [-1, self.input_size])
+        enc_in = tf.reshape(enc_in, [-1, self.input_size])
+        enc_in = tf.reshape(enc_in, [-1, -1, self.input_size])
+        dec_in = tf.reshape(dec_in, [-1, self.input_size])
+        dec_out = tf.reshape(dec_out, [-1, self.input_size])
 
-      enc_in = tf.split(enc_in, source_seq_len-1, axis=0)
-      dec_in = tf.split(dec_in, target_seq_len, axis=0)
-      dec_out = tf.split(dec_out, target_seq_len, axis=0)
+        enc_in = tf.split(enc_in, source_seq_len-1, axis=0)
+        dec_in = tf.split(dec_in, target_seq_len, axis=0)
+        dec_out = tf.split(dec_out, target_seq_len, axis=0)
 
     # === Add space decoder ===
     cell = rnn_cell_extensions.LinearSpaceDecoderWrapper( cell, self.input_size )
+    #cellBk = rnn_cell_extensionsBk.LinearSpaceDecoderWrapper( cellBk, self.input_size )
 
     # Finally, wrap everything in a residual layer if we want to model velocities
     if residual_velocities:
@@ -128,6 +131,9 @@ class Seq2SeqModel(object):
     else:
       raise(ValueError, "unknown loss: %s" % loss_to_use)
 
+    cellFw = tf.nn.rnn_cell.LSTMCell(num_units=self.input_size, reuse=tf.get_variable_scope().reuse)
+    #cellBw = tf.nn.rnn_cell.GRUCell(num_units=self.input_size, reuse=tf.get_variable_scope().reuse)
+
     # Build the RNN
     if architecture == "basic":
       # Basic RNN does not have a loop function in its API, so copying here.
@@ -136,9 +142,24 @@ class Seq2SeqModel(object):
         outputs, self.states = tf.contrib.legacy_seq2seq.rnn_decoder( dec_in, enc_state, cell, loop_function=lf ) # Decoder
     elif architecture == "tied":
       outputs, self.states = tf.contrib.legacy_seq2seq.tied_rnn_seq2seq( enc_in, dec_in, cell, loop_function=lf )
+    elif architecture == 'bid':
+      cell = tf.nn.rnn_cell.LSTMCell(num_units=self.input_size, reuse=tf.get_variable_scope().reuse)
+      #cell = tf.nn.rnn_cell.GRUCell(num_units=self.input_size, reuse=tf.get_variable_scope().reuse)
+      outputs, self.states = tf.nn.bidirectional_dynamic_rnn(
+        cell_fw = cell,
+        cell_bw = cell,
+        inputs = dec_in
+        #,sequence_length = [-1, target_seq_len]
+        ,dtype=tf.float32
+        ,time_major=False
+        #  initial_state_fw=init_state_fw,
+        #  initial_state_bw=init_state_bw
+      )
     else:
       raise(ValueError, "Uknown architecture: %s" % architecture )
 
+    if architecture == 'bid':
+      outputs = outputs[0]    
     self.outputs = outputs
 
     with tf.name_scope("loss_angles"):
@@ -409,7 +430,6 @@ class Seq2SeqModel(object):
                        self.loss,
                        self.loss_summary,
                        self.learning_rate_summary]
-
         outputs = session.run( output_feed, input_feed )
         return outputs[1], outputs[2], outputs[3], outputs[4]  # Gradient norm, loss, summaries
 
