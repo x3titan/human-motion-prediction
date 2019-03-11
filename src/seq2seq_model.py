@@ -81,7 +81,6 @@ class Seq2SeqModel(object):
     # === Create the RNN that will keep the state ===
     print('rnn_size = {0}'.format( rnn_size ))
     cell = tf.contrib.rnn.GRUCell( self.rnn_size )
-    cellBk = tf.contrib.rnn.GRUCell( self.rnn_size )    
 
     if num_layers > 1:
       cell = tf.contrib.rnn.MultiRNNCell( [tf.contrib.rnn.GRUCell(self.rnn_size) for _ in range(num_layers)] )
@@ -102,7 +101,6 @@ class Seq2SeqModel(object):
         dec_out = tf.transpose(dec_out, [1, 0, 2])
 
         enc_in = tf.reshape(enc_in, [-1, self.input_size])
-        enc_in = tf.reshape(enc_in, [-1, -1, self.input_size])
         dec_in = tf.reshape(dec_in, [-1, self.input_size])
         dec_out = tf.reshape(dec_out, [-1, self.input_size])
 
@@ -112,7 +110,6 @@ class Seq2SeqModel(object):
 
     # === Add space decoder ===
     cell = rnn_cell_extensions.LinearSpaceDecoderWrapper( cell, self.input_size )
-    #cellBk = rnn_cell_extensionsBk.LinearSpaceDecoderWrapper( cellBk, self.input_size )
 
     # Finally, wrap everything in a residual layer if we want to model velocities
     if residual_velocities:
@@ -143,23 +140,25 @@ class Seq2SeqModel(object):
     elif architecture == "tied":
       outputs, self.states = tf.contrib.legacy_seq2seq.tied_rnn_seq2seq( enc_in, dec_in, cell, loop_function=lf )
     elif architecture == 'bid':
+      dec_in = tf.transpose(dec_in, [1, 0, 2])    
+      dec_out = tf.transpose(dec_out, [1, 0, 2])    
       cell = tf.nn.rnn_cell.LSTMCell(num_units=self.input_size, reuse=tf.get_variable_scope().reuse)
       #cell = tf.nn.rnn_cell.GRUCell(num_units=self.input_size, reuse=tf.get_variable_scope().reuse)
       outputs, self.states = tf.nn.bidirectional_dynamic_rnn(
         cell_fw = cell,
         cell_bw = cell,
         inputs = dec_in
-        #,sequence_length = [-1, target_seq_len]
+        #,sequence_length = [target_seq_len,target_seq_len,target_seq_len,target_seq_len,target_seq_len,target_seq_len,target_seq_len,target_seq_len]
         ,dtype=tf.float32
         ,time_major=False
-        #  initial_state_fw=init_state_fw,
-        #  initial_state_bw=init_state_bw
+        #,initial_state_fw=init_state_fw
+        #,initial_state_bw=init_state_bw
       )
     else:
       raise(ValueError, "Uknown architecture: %s" % architecture )
 
     if architecture == 'bid':
-      outputs = outputs[0]    
+      outputs = outputs[0]
     self.outputs = outputs
 
     with tf.name_scope("loss_angles"):

@@ -635,11 +635,11 @@ def define_actions( action ):
     ValueError if the action is not included in H3.6M
   """
 
-  actions = ["walking", "eating", "smoking", "discussion",  "directions",
-              "greeting", "phoning", "posing", "purchases", "sitting",
-              "sittingdown", "takingphoto", "waiting", "walkingdog",
-              "walkingtogether"]
-  #actions = ["walking"]
+  #actions = ["walking", "eating", "smoking", "discussion",  "directions",
+  #            "greeting", "phoning", "posing", "purchases", "sitting",
+  #            "sittingdown", "takingphoto", "waiting", "walkingdog",
+  #            "walkingtogether"]
+  actions = ["walking"]
 
   if action in actions:
     return [action]
