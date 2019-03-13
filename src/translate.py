@@ -27,8 +27,13 @@ tf.app.flags.DEFINE_float("max_gradient_norm", 5, "Clip gradients to this norm."
 tf.app.flags.DEFINE_integer("batch_size", 16, "Batch size to use during training.")
 tf.app.flags.DEFINE_integer("iterations", int(1e5), "Iterations to train for.")
 # Architecture
-#tf.app.flags.DEFINE_string("architecture", "tied", "Seq2seq architecture to use: [basic, tied].")
-tf.app.flags.DEFINE_string("architecture", "bid", "Seq2seq architecture to use: [basic, tied, bid].")
+#basic: basic mode, use tf.contrib.rnn.static_rnn as encoder, and use tf.contrib.legacy_seq2seq.rnn_decoder as decoder
+#tied: tied mode, use tf.contrib.legacy_seq2seq.tied_rnn_seq2seq for both coder and encoder
+#bid: bid mode, use tf.nn.bidirectional_dynamic_rnn as encoder, and use tf.contrib.legacy_seq2seq.rnn_decoder as decoder
+#     bid mode has 2 submode:
+#         1: lstm submode: both encoder and decoder use tf.nn.rnn_cell.LSTMCell as the cell
+#         2: gru submode: both encoder and decoder use tf.nn.rnn_cell.GRUCell as the cell
+tf.app.flags.DEFINE_string("architecture", "bid,lstm", "Seq2seq architecture to use: [basic, tied, bid(lstm,gru)].")
 tf.app.flags.DEFINE_integer("size", 1024, "Size of each model layer.")
 tf.app.flags.DEFINE_integer("num_layers", 1, "Number of layers in the model.")
 tf.app.flags.DEFINE_integer("seq_length_in", 50, "Number of frames to feed into the encoder. 25 fps")
@@ -639,7 +644,7 @@ def define_actions( action ):
               "greeting", "phoning", "posing", "purchases", "sitting",
               "sittingdown", "takingphoto", "waiting", "walkingdog",
               "walkingtogether"]
-  #actions = ["walking"]
+  #actions = ["walking"]    #open this line to fast debug
 
   if action in actions:
     return [action]

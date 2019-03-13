@@ -85,6 +85,12 @@ class Seq2SeqModel(object):
     if num_layers > 1:
       cell = tf.contrib.rnn.MultiRNNCell( [tf.contrib.rnn.GRUCell(self.rnn_size) for _ in range(num_layers)] )
 
+    architecture = architecture.split(',')
+    architectureSub = architecture[1]
+    architecture = architecture[0]
+
+    print("========working mode: %s======working submode: %s========"%(architecture, architectureSub));
+
     # === Transform the inputs ===
     with tf.name_scope("inputs"):
       enc_in = tf.placeholder(dtype, shape=[None, source_seq_len-1, self.input_size], name="enc_in")
@@ -97,16 +103,15 @@ class Seq2SeqModel(object):
 
       if architecture != 'bid':
         enc_in = tf.transpose(enc_in, [1, 0, 2])
-        dec_in = tf.transpose(dec_in, [1, 0, 2])
-        dec_out = tf.transpose(dec_out, [1, 0, 2])
-
         enc_in = tf.reshape(enc_in, [-1, self.input_size])
-        dec_in = tf.reshape(dec_in, [-1, self.input_size])
-        dec_out = tf.reshape(dec_out, [-1, self.input_size])
-
         enc_in = tf.split(enc_in, source_seq_len-1, axis=0)
-        dec_in = tf.split(dec_in, target_seq_len, axis=0)
-        dec_out = tf.split(dec_out, target_seq_len, axis=0)
+
+      dec_in = tf.transpose(dec_in, [1, 0, 2])
+      dec_out = tf.transpose(dec_out, [1, 0, 2])
+      dec_in = tf.reshape(dec_in, [-1, self.input_size])
+      dec_out = tf.reshape(dec_out, [-1, self.input_size])
+      dec_in = tf.split(dec_in, target_seq_len, axis=0)
+      dec_out = tf.split(dec_out, target_seq_len, axis=0)
 
     # === Add space decoder ===
     cell = rnn_cell_extensions.LinearSpaceDecoderWrapper( cell, self.input_size )
@@ -128,7 +133,7 @@ class Seq2SeqModel(object):
     else:
       raise(ValueError, "unknown loss: %s" % loss_to_use)
 
-    cellFw = tf.nn.rnn_cell.LSTMCell(num_units=self.input_size, reuse=tf.get_variable_scope().reuse)
+    #cellFw = tf.nn.rnn_cell.LSTMCell(num_units=self.input_size, reuse=tf.get_variable_scope().reuse)
     #cellBw = tf.nn.rnn_cell.GRUCell(num_units=self.input_size, reuse=tf.get_variable_scope().reuse)
 
     # Build the RNN
@@ -140,25 +145,38 @@ class Seq2SeqModel(object):
     elif architecture == "tied":
       outputs, self.states = tf.contrib.legacy_seq2seq.tied_rnn_seq2seq( enc_in, dec_in, cell, loop_function=lf )
     elif architecture == 'bid':
-      dec_in = tf.transpose(dec_in, [1, 0, 2])    
-      dec_out = tf.transpose(dec_out, [1, 0, 2])    
-      cell = tf.nn.rnn_cell.LSTMCell(num_units=self.input_size, reuse=tf.get_variable_scope().reuse)
-      #cell = tf.nn.rnn_cell.GRUCell(num_units=self.input_size, reuse=tf.get_variable_scope().reuse)
-      outputs, self.states = tf.nn.bidirectional_dynamic_rnn(
-        cell_fw = cell,
-        cell_bw = cell,
-        inputs = dec_in
+      #enc_in = tf.transpose(enc_in, [1, 0, 2])    
+      #enc_in = tf.split(enc_in, [source_seq_len-1], axis=0)
+      if architectureSub == 'lstm':
+        cellBid = tf.nn.rnn_cell.LSTMCell(num_units=self.input_size, reuse=tf.get_variable_scope().reuse)
+      elif architectureSub == 'gru':
+        cellBid = tf.nn.rnn_cell.GRUCell(num_units=self.input_size, reuse=tf.get_variable_scope().reuse)
+      else:
+        print("ERROR===>unknow architectureSub mod: %s"%(architectureSub))
+      #encoder
+      _, enc_state = tf.nn.bidirectional_dynamic_rnn(   
+        cell_fw = cellBid,
+        cell_bw = cellBid,
+        inputs = enc_in
         #,sequence_length = [target_seq_len,target_seq_len,target_seq_len,target_seq_len,target_seq_len,target_seq_len,target_seq_len,target_seq_len]
         ,dtype=tf.float32
         ,time_major=False
         #,initial_state_fw=init_state_fw
         #,initial_state_bw=init_state_bw
       )
+      #decoder
+      if architectureSub == 'lstm':
+        cellDec = tf.nn.rnn_cell.LSTMCell(num_units=self.input_size, reuse=tf.get_variable_scope().reuse)
+      elif architectureSub == 'gru':
+        cellDec = tf.nn.rnn_cell.GRUCell(num_units=self.input_size, reuse=tf.get_variable_scope().reuse)
+      else:
+        print("ERROR===>unknow architectureSub mod: %s"%(architectureSub))
+      outputs, self.states = tf.contrib.legacy_seq2seq.rnn_decoder( dec_in, enc_state[0], cellDec, loop_function=lf )
     else:
       raise(ValueError, "Uknown architecture: %s" % architecture )
 
-    if architecture == 'bid':
-      outputs = outputs[0]
+    #if architecture == 'bid':
+    #  outputs = outputs[0]
     self.outputs = outputs
 
     with tf.name_scope("loss_angles"):
